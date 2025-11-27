@@ -6,7 +6,7 @@ import shutil
 from utils import parse_github_owner_repo, github_api_request, get_authenticated_user
 
 
-def clone_gitlab_repo(local_clone_dir, gitlab_token, gitlab_repo):
+def clone_gl_repo(local_clone_dir, gitlab_token, gitlab_repo):
     log.info(f"Cloning GitLab repository into '{local_clone_dir}' folder ...")
     if os.path.exists(local_clone_dir):
         try:
@@ -25,7 +25,7 @@ def clone_gitlab_repo(local_clone_dir, gitlab_token, gitlab_repo):
         sys.exit(1)
 
 
-def ensure_github_repo_exists(github_repo):
+def ensure_gh_repo_exists(github_repo):
     owner, repo = parse_github_owner_repo(github_repo)
     log.info(f"Checking if GitHub repo '{owner}/{repo}' exists...")
     code, body = github_api_request(f"/repos/{owner}/{repo}")
@@ -74,7 +74,7 @@ def ensure_github_repo_exists(github_repo):
         sys.exit(1)
 
 
-def push_to_github(target_owner, target_repo, github_token, local_clone_dir="repo"):
+def push_to_gh(target_owner, target_repo, github_token, local_clone_dir="repo"):
     log.info(f"Pushing to GitHub repository '{target_repo}' ...")
     if not os.path.isdir(local_clone_dir):
         log.error(f"Repository directory '{local_clone_dir}' does not exist. Cannot push to GitHub.")

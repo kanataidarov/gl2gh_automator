@@ -10,8 +10,6 @@ GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 def parse_github_owner_repo(url):
     if url.startswith("https://"):
         path = url.split('https://github.com/')[1]
-    elif url.startswith("http://"):
-        path = url.split('http://github.com/')[1]
     else:
         path = url.split('github.com/')[-1]
     path = path.rstrip('/')
@@ -43,11 +41,8 @@ def github_api_request(path, method='GET', data=None, headers=None):
             resp_body = resp.read().decode('utf-8')
             return resp.getcode(), json.loads(resp_body) if resp_body else None
     except urllib.error.HTTPError as e:
-        try:
-            err_body = e.read().decode('utf-8')
-            return e.code, json.loads(err_body) if err_body else None
-        except Exception:
-            return e.code, None
+        err_body = e.read().decode('utf-8')
+        return e.code, json.loads(err_body) if err_body else None
     except Exception as e:
         log.error(f"GitHub API request failed: {e}")
         return None, None
