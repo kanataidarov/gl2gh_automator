@@ -1,0 +1,39 @@
+# Byte-code files
+*.pyc
+__pycache__/
+
+# Virtual environment
+venv/
+.venv/
+env/
+.env/
+
+# Editor/IDE specific files
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store # macOS specific
+
+# Test and build artifacts
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+
+# Configuration files
+.env
+.flaskenv
+instance/
+
+# Jupyter Notebook specific files
+.ipynb_checkpoints/
+
+# Database files
+*.sqlite3
+*.db
+
+# Log files
+*.log
+
+repo
