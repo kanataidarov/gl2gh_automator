@@ -1,5 +1,6 @@
 from args import build_args
-from gh import clone_gl_repo, ensure_gh_repo_exists, push_to_gh
+from gh import ensure_gh_repo_exists, push_to_gh
+from gl import clone_gl_repo
 
 import logging as log
 import os
