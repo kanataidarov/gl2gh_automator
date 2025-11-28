@@ -1,12 +1,13 @@
 from args import build_args
-
 import gh
 import gl
 import logging as log
 import os
 
+
 GITLAB_TOKEN = os.getenv('GITLAB_TOKEN')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
+
 
 def main():
     if not GITLAB_TOKEN:
