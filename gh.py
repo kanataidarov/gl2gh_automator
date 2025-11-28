@@ -66,19 +66,23 @@ def push_repo(gh_owner, gh_repo):
         log.error(f"Repository directory '{LOCAL_CLONE_DIR}' does not exist. Cannot push to GitHub.")
         sys.exit(1)
     owner, repo = gh_owner, gh_repo
-    os.chdir(LOCAL_CLONE_DIR)
-    try:
-        subprocess.run(["git", "remote", "remove", "origin"], check=True)
-    except subprocess.CalledProcessError:
-        log.info("No existing 'origin' remote to remove or removal failed; continuing.")
     remote_url = f"https://{GITHUB_TOKEN}@github.com/{owner}/{repo}.git"
+    if _remote_exists("origin"):
+        log.info("Updating existing 'origin' remote to point to the target repo.")
+        try:
+            _set_remote_url("origin", remote_url)
+        except subprocess.CalledProcessError as e:
+            log.error(f"Failed to update remote 'origin': {e}")
+            sys.exit(1)
+    else:
+        try:
+            subprocess.run(["git", "-C", LOCAL_CLONE_DIR, "remote", "add", "origin", remote_url], check=True)
+        except subprocess.CalledProcessError as e:
+            log.error(f"Failed to add remote 'origin': {e}")
+            sys.exit(1)
+    _cleanup_origin_lock_files()
     try:
-        subprocess.run(["git", "remote", "add", "origin", remote_url], check=True)
-    except subprocess.CalledProcessError as e:
-        log.error(f"Failed to add remote 'origin': {e}")
-        sys.exit(1)
-    try:
-        subprocess.run(["git", "push", "--mirror", "origin"], check=True)
+        subprocess.run(["git", "-C", LOCAL_CLONE_DIR, "push", "--mirror", "origin"], check=True)
     except subprocess.CalledProcessError as e:
         log.error(f"Failed to push to GitHub: {e}")
         sys.exit(1)
@@ -214,6 +218,35 @@ def _branch_exists(owner, repo, branch):
 
     log.warning(f"Unexpected response checking branch '{branch}' on {owner}/{repo}: status={code} body={body}")
     return False
+
+
+def _remote_exists(name):
+    try:
+        result = subprocess.run(["git", "-C", LOCAL_CLONE_DIR, "remote", "get-url", name], check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        return result.returncode == 0
+    except Exception as e:
+        log.warning(f"Unable to determine if remote '{name}' exists: {e}")
+        return False
+
+
+def _set_remote_url(name, url):
+    subprocess.run(["git", "-C", LOCAL_CLONE_DIR, "remote", "set-url", name, url], check=True)
+
+
+def _cleanup_origin_lock_files():
+    git_dir = os.path.join(LOCAL_CLONE_DIR, '.git')
+    origin_refs = os.path.join(git_dir, 'refs', 'remotes', 'origin')
+    if not os.path.isdir(origin_refs):
+        return
+    for root, _, files in os.walk(origin_refs):
+        for file in files:
+            if file.endswith('.lock'):
+                lock_path = os.path.join(root, file)
+                try:
+                    os.remove(lock_path)
+                    log.info(f"Removed stale lock file {lock_path}")
+                except Exception as e:
+                    log.warning(f"Could not remove stale lock {lock_path}: {e}")
 
 
 def _create_pull_request(owner, repo, head, base, title, body):
