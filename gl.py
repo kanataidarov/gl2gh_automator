@@ -69,12 +69,14 @@ def ensure_local_branch(branch, web_url):
         return False
 
     try:
-        res = subprocess.run(["git", "-C", LOCAL_CLONE_DIR, "rev-parse", "--verify", f"refs/heads/{branch}"],
-                             check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if res.returncode != 0:
-            created = _ensure_local_branch_from_remote(branch, web_url)
-            if not created:
-                return False
+        deleted = _delete_local_branch(branch)
+        if not deleted:
+            log.error(f"Failed to delete existing local branch `{branch}` before recreating.")
+            return False
+
+        created = _ensure_local_branch_from_remote(branch, web_url)
+        if not created:
+            return False
     except Exception as e:
         log.error(f"Failed to verify local branch '{branch}': {e}")
         return False
@@ -82,10 +84,37 @@ def ensure_local_branch(branch, web_url):
     return True
 
 
+def _delete_local_branch(branch):
+    """Delete local branch if it exists. Returns True if branch deleted or did not exist, False on error."""
+    try:
+        exists = subprocess.run(["git", "-C", LOCAL_CLONE_DIR, "rev-parse", "--verify", f"refs/heads/{branch}"],
+                                check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if exists.returncode == 0:
+            cur = subprocess.run(["git", "-C", LOCAL_CLONE_DIR, "rev-parse", "--abbrev-ref", "HEAD"],
+                                 check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True).stdout.strip()
+            if cur == branch:
+                switched = False
+                for candidate in ("main", "master"):
+                    cand = subprocess.run(
+                        ["git", "-C", LOCAL_CLONE_DIR, "rev-parse", "--verify", f"refs/heads/{candidate}"],
+                        check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    if cand.returncode == 0:
+                        subprocess.run(["git", "-C", LOCAL_CLONE_DIR, "checkout", candidate], check=False)
+                        switched = True
+                        break
+                if not switched:
+                    tmp_branch = f"tmp_switch_{uuid.uuid4().hex[:8]}"
+                    subprocess.run(["git", "-C", LOCAL_CLONE_DIR, "checkout", "-b", tmp_branch], check=False)
+            subprocess.run(["git", "-C", LOCAL_CLONE_DIR, "branch", "-D", branch], check=False)
+            log.info(f"Deleted local branch '{branch}'")
+        return True
+    except Exception as e:
+        log.warning(f"Failed to delete local branch '{branch}': {e}")
+        return False
+
+
 def _ensure_local_branch_from_remote(branch, web_url):
-    """Try to create a local branch by fetching from a remote.
-    Returns True if branch created, False otherwise.
-    """
+    """Try to create a local branch by fetching from a remote. Returns True if branch created, False otherwise."""
     try:
         if not web_url:
             log.error("Branch not found on origin and no web_url provided to locate source project.")
