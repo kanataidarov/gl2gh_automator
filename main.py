@@ -21,13 +21,13 @@ def main():
     args = build_args().parse_args()
 
     if args.command == 'clone':
-        gl.clone_gl_repo(args.gitlab_repo)
-        gh_owner, gh_repo = gh.ensure_gh_repo_exists(args.github_repo)
-        gh.push_to_gh(gh_owner, gh_repo)
+        gl.clone_repo(args.gitlab_repo)
+        gh_owner, gh_repo = gh.ensure_repo(args.github_repo)
+        gh.push_repo(gh_owner, gh_repo)
         return True
 
     if args.command == 'sync':
-        gh_owner, gh_repo = gh.ensure_gh_repo_exists(args.github_repo)
+        gh_owner, gh_repo = gh.ensure_repo(args.github_repo)
         if args.mr_url:
             mr = gl.get_mr(args.gitlab_repo, args.mr_url)
             if not mr:
@@ -41,7 +41,7 @@ def main():
                 log.error(f"Failed to ensure local branch '{branch}' for MR '{args.mr_url}'")
                 return False
 
-            branch_ok = gh.push_from_local(gh_owner, gh_repo, branch)
+            branch_ok = gh.push_branch_from_local(gh_owner, gh_repo, branch)
             if not branch_ok:
                 log.error(f"Head branch '{branch}' is not available on GitHub for {gh_owner}/{gh_repo} and could not be pushed.")
                 return False
@@ -62,7 +62,7 @@ def main():
                     failures += 1
                     continue
 
-                branch_ok = gh.push_from_local(gh_owner, gh_repo, branch)
+                branch_ok = gh.push_branch_from_local(gh_owner, gh_repo, branch)
                 if not branch_ok:
                     log.error(
                         f"Head branch '{branch}' is not available on GitHub for {gh_owner}/{gh_repo} and could not be pushed.")

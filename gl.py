@@ -14,7 +14,7 @@ GITLAB_TOKEN = os.getenv('GITLAB_TOKEN')
 LOCAL_CLONE_DIR = os.getenv('LOCAL_CLONE_DIR', 'repo')
 
 
-def clone_gl_repo(gl_repo):
+def clone_repo(gl_repo):
     log.info(f"Cloning GitLab repository into '{LOCAL_CLONE_DIR}' folder ...")
     if os.path.exists(LOCAL_CLONE_DIR):
         try:

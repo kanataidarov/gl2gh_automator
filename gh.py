@@ -11,7 +11,7 @@ GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 LOCAL_CLONE_DIR = os.getenv('LOCAL_CLONE_DIR', 'repo')
 
 
-def ensure_gh_repo_exists(gh_repo):
+def ensure_repo(gh_repo):
     owner, repo = _parse_owner_repo(gh_repo)
     log.info(f"Checking if GitHub repo '{owner}/{repo}' exists...")
     code, body = _api_request(f"/repos/{owner}/{repo}")
@@ -60,7 +60,7 @@ def ensure_gh_repo_exists(gh_repo):
         sys.exit(1)
 
 
-def push_to_gh(gh_owner, gh_repo):
+def push_repo(gh_owner, gh_repo):
     log.info(f"Pushing to GitHub repository '{gh_repo}' ...")
     if not os.path.isdir(LOCAL_CLONE_DIR):
         log.error(f"Repository directory '{LOCAL_CLONE_DIR}' does not exist. Cannot push to GitHub.")
@@ -84,7 +84,7 @@ def push_to_gh(gh_owner, gh_repo):
         sys.exit(1)
 
 
-def push_from_local(owner, repo, branch):
+def push_branch_from_local(owner, repo, branch):
     existed_before_push = False
     try:
         if _branch_exists(owner, repo, branch):
