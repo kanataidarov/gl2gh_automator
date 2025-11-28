@@ -84,32 +84,14 @@ def push_to_gh(gh_owner, gh_repo):
         sys.exit(1)
 
 
-def ensure_branch_present_or_push(owner, repo, branch, push_if_missing=True):
-    """Ensure 'branch' exists on GitHub for owner/repo. If missing and push_if_missing is True,
-    attempt to push it from the local clone at `LOCAL_CLONE_DIR`.
-    Returns True if branch exists (or was pushed successfully), False otherwise.
-    """
-    exists = _branch_exists(owner, repo, branch)
-    if exists:
-        return True
-
-    log.info(f"Branch '{branch}' does not exist on GitHub for {owner}/{repo}.")
-    if not push_if_missing:
-        log.info("Not configured to push missing branches. Skipping push.")
-        return False
-
-    if not os.path.isdir(LOCAL_CLONE_DIR):
-        log.error(f"Local clone directory '{LOCAL_CLONE_DIR}' not found; cannot push branch '{branch}'.")
-        return False
-
+def push_from_local(owner, repo, branch):
+    existed_before_push = False
     try:
-        res = subprocess.run(["git", "-C", LOCAL_CLONE_DIR, "rev-parse", "--verify", f"refs/heads/{branch}"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if res.returncode != 0:
-            log.error(f"Local branch '{branch}' not found in '{LOCAL_CLONE_DIR}'; cannot push to GitHub.")
-            return False
+        if _branch_exists(owner, repo, branch):
+            log.info(f"Branch '{branch}' already exists on {owner}/{repo}.")
+            existed_before_push = True
     except Exception as e:
-        log.error(f"Failed to verify local branch '{branch}': {e}")
-        return False
+        log.warning(f"Could not determine if branch '{branch}' exists before push: {e}")
 
     masked = f"https://***@github.com/{owner}/{repo}.git"
     log.info(f"Pushing local branch '{branch}' to remote {owner}/{repo} (remote URL masked: {masked})")
@@ -122,8 +104,10 @@ def ensure_branch_present_or_push(owner, repo, branch, push_if_missing=True):
 
     re_exists = _branch_exists(owner, repo, branch)
     if re_exists:
-        log.info(f"Successfully pushed branch '{branch}' to {owner}/{repo}.")
+        if not existed_before_push:
+            log.info(f"Successfully pushed branch '{branch}' to {owner}/{repo}.")
         return True
+
     log.error(f"Branch '{branch}' still not visible on GitHub after push attempt.")
     return False
 
@@ -134,7 +118,7 @@ def sync_mr_to_pr(gitlab_repo, mr, gh_owner, gh_repo):
     user_map: optional dict mapping gitlab usernames to github logins.
     Returns True on success, False on failure.
     """
-    title = mr.get('title') or f"MR {mr.get('iid')}"
+    title = mr.get('title')
     description = mr.get('description') or ''
     iid = mr.get('iid')
     source_branch = mr.get('source_branch')
@@ -146,9 +130,18 @@ def sync_mr_to_pr(gitlab_repo, mr, gh_owner, gh_repo):
     provenance = f"\n\n---\nImported from GitLab project {gitlab_repo} MR !{iid} by {author_name}. Original: {web_url}"
     body = (description or '') + provenance
 
-    head = source_branch
+    try:
+        code_prs, prs = _api_request(f"/repos/{gh_owner}/{gh_repo}/pulls?state=open")
+        if code_prs == 200 and isinstance(prs, list):
+            for existing_pr in prs:
+                if (existing_pr.get('title') or '').strip() == (title or '').strip():
+                    log.info(f"Open PR with title `{title}` already exists: #{existing_pr.get('number')} - {existing_pr.get('html_url')}")
+                    return True
+    except Exception as e:
+        log.warning(f"Failed to check existing PRs before creating PR: {e}")
 
-    pr = _create_pull_request(gh_owner, gh_repo, head, target_branch, title, body)
+
+    pr = _create_pull_request(gh_owner, gh_repo, source_branch, target_branch, title, body)
     if pr is None:
         log.error(f"Failed to create PR for MR !{iid}")
         return False
@@ -216,7 +209,7 @@ def _branch_exists(owner, repo, branch):
         log.info(f"Branch '{branch}' exists on {owner}/{repo}.")
         return True
     if code == 404:
-        log.info(f"Branch '{branch}' not found on {owner}/{repo}.")
+        log.info(f"Branch '{branch}' does not exist on GitHub for {owner}/{repo}.")
         return False
 
     log.warning(f"Unexpected response checking branch '{branch}' on {owner}/{repo}: status={code} body={body}")

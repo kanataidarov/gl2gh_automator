@@ -7,6 +7,7 @@ import sys
 import urllib.request
 import urllib.error
 import urllib.parse
+import uuid
 
 
 GITLAB_TOKEN = os.getenv('GITLAB_TOKEN')
@@ -58,6 +59,81 @@ def list_mrs(gl_repo, state='opened'):
         return body
     log.error(f"Failed to list Merge Requests for project {gl_repo}: status={code} body={body}")
     return []
+
+
+def ensure_local_branch(branch, web_url):
+    """Ensure that the given branch exists in the local clone; if not, create it from remote."""
+
+    if not os.path.isdir(LOCAL_CLONE_DIR):
+        log.error(f"Local clone directory '{LOCAL_CLONE_DIR}' not found; cannot push branch '{branch}'.")
+        return False
+
+    try:
+        res = subprocess.run(["git", "-C", LOCAL_CLONE_DIR, "rev-parse", "--verify", f"refs/heads/{branch}"],
+                             check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if res.returncode != 0:
+            created = _ensure_local_branch_from_remote(branch, web_url)
+            if not created:
+                return False
+    except Exception as e:
+        log.error(f"Failed to verify local branch '{branch}': {e}")
+        return False
+
+    return True
+
+
+def _ensure_local_branch_from_remote(branch, web_url):
+    """Try to create a local branch by fetching from a remote.
+    Returns True if branch created, False otherwise.
+    """
+    try:
+        if not web_url:
+            log.error("Branch not found on origin and no web_url provided to locate source project.")
+            return False
+
+        p = urllib.parse.urlparse(web_url)
+        path = (p.path or '').split('/-/')[0].lstrip('/')
+        if not path:
+            log.error(f"Failed to parse project path from web_url '{web_url}'")
+            return False
+
+        host = _parse_host(web_url)
+        host_netloc = urllib.parse.urlparse(host).netloc
+        remote_repo_path = path
+
+        if GITLAB_TOKEN:
+            remote_url = f"https://oauth2:{GITLAB_TOKEN}@{host_netloc}/{remote_repo_path}.git"
+        else:
+            remote_url = f"https://{host_netloc}/{remote_repo_path}.git"
+
+        tmp_remote = f"tmp_remote_{uuid.uuid4().hex[:8]}"
+        try:
+            subprocess.run(["git", "-C", LOCAL_CLONE_DIR, "remote", "add", tmp_remote, remote_url], check=True)
+        except subprocess.CalledProcessError as e:
+            log.error(f"Failed to add temporary remote '{tmp_remote}' -> {remote_url}: {e}")
+            return False
+
+        try:
+            ls2 = subprocess.run(["git", "-C", LOCAL_CLONE_DIR, "ls-remote", "--heads", tmp_remote, branch],
+                                 check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if ls2.returncode == 0 and ls2.stdout.strip():
+                log.info(f"Branch '{branch}' found on remote {tmp_remote}; fetching...")
+                subprocess.run(["git", "-C", LOCAL_CLONE_DIR, "fetch", tmp_remote, f"refs/heads/{branch}:refs/remotes/{tmp_remote}/{branch}"], check=True)
+                subprocess.run(["git", "-C", LOCAL_CLONE_DIR, "checkout", "-b", branch, "--track", f"{tmp_remote}/{branch}"], check=True)
+                log.info(f"Created local branch '{branch}' tracking {tmp_remote}/{branch}")
+                return True
+            else:
+                log.error(f"Branch '{branch}' not found on origin or source remote ({remote_url}).")
+                return False
+        except subprocess.CalledProcessError as e:
+            log.error(f"Failed to fetch/create branch '{branch}' from remote {tmp_remote}: {e}")
+            return False
+        finally:
+            subprocess.run(["git", "-C", LOCAL_CLONE_DIR, "remote", "remove", tmp_remote], check=False)
+
+    except Exception as e:
+        log.error(f"Unexpected error while ensuring branch from remote: {e}")
+        return False
 
 
 def _api_request(path, gl_host, method='GET', data=None, headers=None):
@@ -169,4 +245,3 @@ def _parse_iid(mr_url):
                 if isinstance(v, str) and v.isdigit():
                     return v
     return None
-

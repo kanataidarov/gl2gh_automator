@@ -34,10 +34,16 @@ def main():
                 log.error(f"Merge request {args.mr_url} not found.")
                 return False
 
-            head = mr.get('source_branch')
-            branch_ok = gh.ensure_branch_present_or_push(gh_owner, gh_repo, head)
+            branch = mr.get('source_branch')
+            web_url = mr.get('web_url')
+            created = gl.ensure_local_branch(branch, web_url)
+            if not created:
+                log.error(f"Failed to ensure local branch '{branch}' for MR '{args.mr_url}'")
+                return False
+
+            branch_ok = gh.push_from_local(gh_owner, gh_repo, branch)
             if not branch_ok:
-                log.error(f"Head branch '{head}' is not available on GitHub for {gh_owner}/{gh_repo} and could not be pushed.")
+                log.error(f"Head branch '{branch}' is not available on GitHub for {gh_owner}/{gh_repo} and could not be pushed.")
                 return False
 
             success = gh.sync_mr_to_pr(args.gitlab_repo, mr, gh_owner, gh_repo)
@@ -48,15 +54,23 @@ def main():
             mrs = gl.list_mrs(args.gitlab_repo)
             failures = 0
             for mr in mrs:
-                head = mr.get('source_branch')
-                branch_ok = gh.ensure_branch_present_or_push(gh_owner, gh_repo, head)
+                branch = mr.get('source_branch')
+                web_url = mr.get('web_url')
+                created = gl.ensure_local_branch(branch, web_url)
+                if not created:
+                    log.error(f"Failed to ensure local branch '{branch}' for MR '{args.mr_url}'")
+                    failures += 1
+                    continue
+
+                branch_ok = gh.push_from_local(gh_owner, gh_repo, branch)
                 if not branch_ok:
                     log.error(
-                        f"Head branch '{head}' is not available on GitHub for {gh_owner}/{gh_repo} and could not be pushed.")
-                    return False
+                        f"Head branch '{branch}' is not available on GitHub for {gh_owner}/{gh_repo} and could not be pushed.")
+                    failures += 1
+                    continue
 
-                ok = gh.sync_mr_to_pr(args.gitlab_repo, mr, gh_owner, gh_repo)
-                if not ok:
+                success = gh.sync_mr_to_pr(args.gitlab_repo, mr, gh_owner, gh_repo)
+                if not success:
                     failures += 1
             if failures:
                 log.error(f"Failed to sync {failures} merge requests")
