@@ -1,60 +1,71 @@
 from args import build_args
-from gh import ensure_gh_repo_exists, push_to_gh, sync_merge_request_to_pr
-from gl import clone_gl_repo, get_merge_request, list_merge_requests
 
+import gh
+import gl
 import logging as log
 import os
-import sys
 
 GITLAB_TOKEN = os.getenv('GITLAB_TOKEN')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 
-if not GITLAB_TOKEN:
-    log.error("GITLAB_TOKEN is not set. Please set environment value GITLAB_TOKEN")
-    sys.exit(1)
-if not GITHUB_TOKEN:
-    log.error("GITHUB_TOKEN is not set. Please set environment value GITHUB_TOKEN")
-    sys.exit(1)
+def main():
+    if not GITLAB_TOKEN:
+        log.error("GITLAB_TOKEN is not set. Please set environment value GITLAB_TOKEN")
+        return False
+    if not GITHUB_TOKEN:
+        log.error("GITHUB_TOKEN is not set. Please set environment value GITHUB_TOKEN")
+        return False
 
-log.basicConfig(level=log.INFO, format='%(levelname)s: %(message)s')
+    log.basicConfig(level=log.INFO, format='%(levelname)s: %(message)s')
 
-LOCAL_CLONE_DIR = "repo"
-
-if __name__ == "__main__":
-    parser = build_args()
-    args = parser.parse_args()
+    args = build_args().parse_args()
 
     if args.command == 'clone':
-        # clone subcommand: require gitlab_repo and github_repo
-        clone_gl_repo(LOCAL_CLONE_DIR, GITLAB_TOKEN, args.gitlab_repo)
-        target_owner, target_repo = ensure_gh_repo_exists(args.github_repo)
-        push_to_gh(target_owner, target_repo, GITHUB_TOKEN, LOCAL_CLONE_DIR)
-        sys.exit(0)
+        gl.clone_gl_repo(args.gitlab_repo)
+        gh_owner, gh_repo = gh.ensure_gh_repo_exists(args.github_repo)
+        gh.push_to_gh(gh_owner, gh_repo)
+        return True
 
     if args.command == 'sync':
-        # sync subcommand: require gitlab_repo, github_repo, and either mr_iid or mr_all
-        target_owner, target_repo = ensure_gh_repo_exists(args.github_repo)
-        if args.mr_iid:
-            mr = get_merge_request(args.gitlab_repo, args.mr_iid)
+        gh_owner, gh_repo = gh.ensure_gh_repo_exists(args.github_repo)
+        if args.mr_url:
+            mr = gl.get_mr(args.gitlab_repo, args.mr_url)
             if not mr:
-                log.error(f"Merge request {args.mr_iid} not found.")
-                sys.exit(1)
-            success = sync_merge_request_to_pr(args.gitlab_repo, mr, target_owner, target_repo, dry_run=args.dry_run, github_token=GITHUB_TOKEN, push_branch_if_missing=False, local_clone_dir=LOCAL_CLONE_DIR)
+                log.error(f"Merge request {args.mr_url} not found.")
+                return False
+
+            head = mr.get('source_branch')
+            branch_ok = gh.ensure_branch_present_or_push(gh_owner, gh_repo, head)
+            if not branch_ok:
+                log.error(f"Head branch '{head}' is not available on GitHub for {gh_owner}/{gh_repo} and could not be pushed.")
+                return False
+
+            success = gh.sync_mr_to_pr(args.gitlab_repo, mr, gh_owner, gh_repo)
             if not success:
                 log.error("Failed to sync MR to PR")
-                sys.exit(1)
+                return True
         elif args.mr_all:
-            mrs = list_merge_requests(args.gitlab_repo, state='opened')
+            mrs = gl.list_mrs(args.gitlab_repo)
             failures = 0
             for mr in mrs:
-                ok = sync_merge_request_to_pr(args.gitlab_repo, mr, target_owner, target_repo, dry_run=args.dry_run, github_token=GITHUB_TOKEN, push_branch_if_missing=False, local_clone_dir=LOCAL_CLONE_DIR)
+                head = mr.get('source_branch')
+                branch_ok = gh.ensure_branch_present_or_push(gh_owner, gh_repo, head)
+                if not branch_ok:
+                    log.error(
+                        f"Head branch '{head}' is not available on GitHub for {gh_owner}/{gh_repo} and could not be pushed.")
+                    return False
+
+                ok = gh.sync_mr_to_pr(args.gitlab_repo, mr, gh_owner, gh_repo)
                 if not ok:
                     failures += 1
             if failures:
                 log.error(f"Failed to sync {failures} merge requests")
-                sys.exit(1)
-        sys.exit(0)
+                return False
+        return True
 
-    # argparse should prevent reaching here
     log.error("Unknown command or missing subcommand")
-    sys.exit(1)
+    return False
+
+
+if __name__ == "__main__":
+    main()

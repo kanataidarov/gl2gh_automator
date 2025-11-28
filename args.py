@@ -7,7 +7,6 @@ def build_args():
 
     subparsers = parser.add_subparsers(dest='command', required=True, help='Operation to perform')
 
-    # clone subcommand
     clone_p = subparsers.add_parser('clone', help='Clone a GitLab repository and push it to GitHub')
     clone_p.add_argument(
         "--gitlab-repo",
@@ -22,7 +21,6 @@ def build_args():
         help="Target GitHub repository in the format owner/repo (e.g. kanataidarov/myrepo)",
     )
 
-    # sync subcommand
     sync_p = subparsers.add_parser('sync', help='Sync Merge Requests from GitLab to GitHub Pull Requests')
     sync_p.add_argument(
         "--gitlab-repo",
@@ -38,23 +36,15 @@ def build_args():
     )
     mr_group = sync_p.add_mutually_exclusive_group(required=True)
     mr_group.add_argument(
-        "--mr-iid",
-        dest="mr_iid",
-        type=int,
-        help="Merge Request IID (project-scoped) to sync. Use with 'sync' to copy a single MR.",
+        "--mr-url",
+        dest="mr_url",
+        help="Merge Request URL to sync. Use with 'sync' to copy a single MR.",
     )
     mr_group.add_argument(
         "--mr-all",
         dest="mr_all",
         action='store_true',
         help="When used with 'sync', sync all open Merge Requests for the project.",
-    )
-
-    sync_p.add_argument(
-        "--dry-run",
-        dest="dry_run",
-        action='store_true',
-        help="Show what would be done when syncing MRs without making changes to GitHub.",
     )
 
     return parser

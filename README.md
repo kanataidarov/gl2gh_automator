@@ -41,16 +41,14 @@ Required arguments:
 - Exactly one of:
   - `--mr-iid MR_IID` (sync a single MR by IID)
   - `--mr-all` (sync all open MRs)
-Optional:
-- `--dry-run` — don't create PRs on GitHub, just show what would be done
 
 Examples:
 ```bash
 # Sync one MR
 python main.py sync --gitlab-repo group/project --github-repo owner/repo --mr-iid 123
 
-# Sync all open MRs (dry-run)
-python main.py sync --gitlab-repo group/project --github-repo owner/repo --mr-all --dry-run
+# Sync all open MRs
+python main.py sync --gitlab-repo group/project --github-repo owner/repo --mr-all
 ```
 
 ## Notes
